@@ -24,7 +24,7 @@ WCHAR szTitle[MAX_LOADSTRING];                  // 标题栏文本
 WCHAR szWindowClass[MAX_LOADSTRING];            // 主窗口类名
 
 double Px = 0, Py = 0;
-double vx0 = 20, vy0 = 20, vx = 0, vy = 0;
+double vx0 = 50, vy0 = 50, vcx = 200, vcy = 200;
 double tpre, tnow;
 bool IsDown[256];
 DWORD g_t_now, g_t_pre;
@@ -44,11 +44,6 @@ void DrawRectangle(HWND);
 void Update();
 void Render(HWND);
 
-struct Force
-{
-	double x = 0, y = 0;
-};
-
 struct Rectangle
 {
 	double vx, vy, px, py, ax, ay, fx, fy, lenx, leny, mass;
@@ -63,12 +58,6 @@ struct Rectangle
 	{
 		ax = fx / mass;
 		ay = fy / mass;
-	}
-	void AddForce(const Force f)
-	{
-		fx += f.x;
-		fy += f.y;
-		UpdateAcc();
 	}
 	void AddForce(double x, double y)
 	{
@@ -95,6 +84,32 @@ struct Rectangle
 	}
 };
 
+struct CameraType
+{
+	double vx, vy, px, py;
+	CameraType()
+	{
+		vx = vy = px = py = 0;
+	}
+	~CameraType() {}
+	void GetPosition(double &x, double &y)
+	{
+		x = px;
+		y = py;
+	}
+	void AddVelocity(double x, double y)
+	{
+		vx += x;
+		vy += y;
+	}
+	void update(double dt)
+	{
+		px += dt * vx;
+		py += dt * vy;
+	}
+};
+
+struct CameraType Camera;
 struct Rectangle Rec1;
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
@@ -257,10 +272,11 @@ void DrawRectangle(HWND hWnd, struct Rectangle &Rec)
 	//GetClientRect(hWnd, &rc);
 	//Px = rc.left;
 	//Py = rc.top;
-	double px, py, lenx, leny;
+	double px, py, lenx, leny, cx, cy;
 	Rec.GetPosition(px, py);
 	Rec.GetSize(lenx, leny);
-	pRenderTarget->DrawRectangle(D2D1::RectF(px, py, px + lenx, py + leny), pBlackBrush);
+	Camera.GetPosition(cx, cy);
+	pRenderTarget->DrawRectangle(D2D1::RectF(px - cx, py - cy, px + lenx - cx, py + leny - cy), pBlackBrush);
 
 	HRESULT hr = pRenderTarget->EndDraw();
 	if (FAILED(hr))
@@ -290,6 +306,7 @@ void Update()
 	}
 	double dt = ((double)CurrentTime - LastUpdateTime) / 1000;
 	Rec1.UpdatePosition(dt);
+	Camera.update(dt);
 	LastUpdateTime = CurrentTime;
 }
 
@@ -348,6 +365,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_KEYDOWN:
 		switch (wParam)
 		{
+		// control rec1
 		case VK('W'):
 			if (!IsDown[VK('W')])
 			{
@@ -376,11 +394,41 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				Rec1.AddForce(vx0, 0);
 			}
 			break;
+		// control camera
+		case VK('I'):
+			if (!IsDown[VK('I')])
+			{
+				IsDown[VK('I')] = true;
+				Camera.AddVelocity(0, -vcy);
+			}
+			break;
+		case VK('K'):
+			if (!IsDown[VK('K')])
+			{
+				IsDown[VK('K')] = true;
+				Camera.AddVelocity(0, vcy);
+			}
+			break;
+		case VK('J'):
+			if (!IsDown[VK('J')])
+			{
+				IsDown[VK('J')] = true;
+				Camera.AddVelocity(-vcx, 0);
+			}
+			break;
+		case VK('L'):
+			if (!IsDown[VK('L')])
+			{
+				IsDown[VK('L')] = true;
+				Camera.AddVelocity(vcx, 0);
+			}
+			break;
 		}
 		break;
 	case WM_KEYUP:
 		switch (wParam)
 		{
+		// control rec1
 		case VK('W'):
 			Rec1.AddForce(0, vy0);
 			IsDown[VK('W')] = false;
@@ -396,6 +444,24 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		case VK('D'):
 			Rec1.AddForce(-vx0, 0);
 			IsDown[VK('D')] = false;
+			break;
+
+		// contral camera
+		case VK('I'):
+			Camera.AddVelocity(0, vcy);
+			IsDown[VK('I')] = false;
+			break;
+		case VK('K'):
+			Camera.AddVelocity(0, -vcy);
+			IsDown[VK('K')] = false;
+			break;
+		case VK('J'):
+			Camera.AddVelocity(vcx, 0);
+			IsDown[VK('J')] = false;
+			break;
+		case VK('L'):
+			Camera.AddVelocity(-vcx, 0);
+			IsDown[VK('L')] = false;
 			break;
 		}
     case WM_DESTROY:
