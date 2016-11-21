@@ -10,6 +10,7 @@
 #include <windows.h>
 #include <time.h>
 #include <WinUser.h>
+#include <cmath>
 
 
 #define MAX_LOADSTRING 100
@@ -26,6 +27,7 @@ WCHAR szWindowClass[MAX_LOADSTRING];            // 主窗口类名
 double Px = 0, Py = 0;
 double vx0 = 50, vy0 = 50, vcx = 200, vcy = 200;
 double tpre, tnow;
+double AirK = 0.01;
 bool IsDown[256];
 DWORD g_t_now, g_t_pre;
 HWND GhWnd;
@@ -44,14 +46,118 @@ void DrawRectangle(HWND);
 void Update();
 void Render(HWND);
 
+struct PVector
+{
+	double x, y;
+	PVector()
+	{
+		x = y = 0;
+	}
+	PVector(double _x, double _y)
+	{
+		x = _x;
+		y = _y;
+	}
+	void add(PVector v)
+	{
+		x += v.x;
+		y += v.y
+	}
+	void sub(PVector v)
+	{
+		x -= v.x;
+		y -= v.y;
+	}
+	void mult(double t)
+	{
+		x *= t;
+		y *= t;
+	}
+	void div(double t)
+	{
+		if (t == 0)
+		{
+			MessageBox(NULL, _T("Can't be divided by 0!"), _T("ERROR"), MB_OK);
+			return;
+		}
+		x /= t;
+		y /= t;
+	}
+	double mag()
+	{
+		return sqrt(x * x + y * y);
+	}
+	void normalize()
+	{
+		double t = mag();
+		div(t);
+	}
+	void setmag(double k)
+	{
+		double t = mag();
+		if (t != 0) mult(k / t);
+	}
+	void limit(double l)
+	{
+		double t = mag();
+		if (t > l) setmag(l);
+	}
+	double heading2D()
+	{
+		return atan2(y, x);
+	}
+	double rotate(double theta)
+	{
+		double _x = x * cos(theta) - y * sin(theta), _y = x * sin(theta) + y * cos(theta);
+		x = _x;
+		y = _y;
+	}
+};
+
+PVector operator + (PVector a, PVector b)
+{
+	return PVector{ a.x + b.x, a.y + b.y };
+}
+PVector operator - (PVector a, PVector b)
+{
+	return PVector{ a.x - b.x, a.y - b.y };
+}
+PVector operator * (PVector v, double k)
+{
+	return PVector{ v.x * k, v.y * k };
+}
+PVector operator / (PVector v, double k)
+{
+	if (k == 0) return v;
+	return PVector{ v.x / k, v.y / k };
+}
+
+struct Rectg
+{
+	PVector location, velocity, acceleration;
+	double mass;
+	Rectg() {};
+	Rectg(double x, double y)
+	{
+		location.add(PVector{ x, y });
+	}
+	void update(double dt)
+	{
+		velocity.add(acceleration * dt);
+		location.add(velocity * dt);
+	}
+};
+
 struct Rectangle
 {
-	double vx, vy, px, py, ax, ay, fx, fy, lenx, leny, mass;
+	double vx, vy, px, py, ax, ay, lenx, leny, mass;
+	double fx, fy, AirForcex, AirForcey;
 	Rectangle()
 	{
 		vx = vy = px = py = ax = ay = fx = fy;
 		mass = 0.5;
 		lenx = leny = 50;
+		AirForcex = AirForcey = 0;
 	}
 	~Rectangle(){}
 	void UpdateAcc()
@@ -69,8 +175,9 @@ struct Rectangle
 	{
 		px += vx * dt;
 		py += vy * dt;
-		vx += ax * dt;
-		vy += ay * dt;
+		double NewAirForcex, NewAirForcey;
+		vx += ax * dt - AirForce;
+		vy += ay * dt - AirForce;
 	}
 	void GetPosition(double &x, double &y)
 	{
